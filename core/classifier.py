@@ -51,11 +51,37 @@ def _get_llm() -> ChatOpenAI:
         openai_api_key=OPENROUTER_API_KEY,
         openai_api_base=OPENROUTER_BASE_URL,
         temperature=0,           # Deterministic for classification
-        max_tokens=10,           # Only need a single word
+        max_tokens=500,          # Allow enough tokens for reasoning models
     )
 
 
 def classify_intent(user_message: str) -> str:
+    msg_lower = user_message.strip().lower()
+
+    # Fast deterministic heuristic for feedback / teaching
+    feedback_triggers = (
+        "learn this",
+        "store this",
+        "here is the correct",
+        "here is the solution",
+        "the right way to do it is",
+        "save this",
+    )
+    if any(trigger in msg_lower for trigger in feedback_triggers):
+        return "FEEDBACK"
+
+    # Fast deterministic heuristic for explanation
+    explain_triggers = (
+        "explain this",
+        "explain line by line",
+        "what does this code do",
+        "what does this function do",
+        "why is this loop",
+        "time complexity of this",
+    )
+    if any(trigger in msg_lower for trigger in explain_triggers):
+        return "EXPLAIN"
+
     try:
         llm = _get_llm()
 
@@ -67,15 +93,13 @@ def classify_intent(user_message: str) -> str:
         classifier_chain = prompt | llm | StrOutputParser()
         classification = classifier_chain.invoke({"user_message": user_message}).strip().upper()
 
-        # Validate that the response is one of the expected labels
-        if classification in ("EXPLAIN", "GENERATE", "FEEDBACK"):
-            return classification
-
-        # Fallback: try to find the keyword in the response
-        if "EXPLAIN" in classification:
-            return "EXPLAIN"
-        elif "FEEDBACK" in classification:
+        # Validate keywords
+        if "FEEDBACK" in classification:
             return "FEEDBACK"
+        elif "EXPLAIN" in classification:
+            return "EXPLAIN"
+        elif "GENERATE" in classification:
+            return "GENERATE"
         else:
             return "GENERATE"
 

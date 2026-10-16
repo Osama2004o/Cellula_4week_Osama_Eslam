@@ -73,7 +73,7 @@ Rules:
                 openai_api_key=OPENROUTER_API_KEY,
                 openai_api_base=OPENROUTER_BASE_URL,
                 temperature=0,
-                max_tokens=10,
+                max_tokens=500,
             )
 
             prompt = ChatPromptTemplate.from_messages([
@@ -84,7 +84,12 @@ Rules:
             eval_chain = prompt | llm | StrOutputParser()
             result = eval_chain.invoke({"query": query, "context": context}).strip().upper()
 
-            return "RELEVANT" in result
+            if "NOT_RELEVANT" in result or "NOT RELEVANT" in result:
+                return False
+            if "RELEVANT" in result:
+                return True
+
+            return True
 
         except Exception as e:
             print(f"[Relevance Check Error] {e}")
