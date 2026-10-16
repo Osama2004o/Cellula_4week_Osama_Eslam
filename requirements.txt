@@ -1,0 +1,27 @@
+# ============================================
+# AI Coding Assistant - Dependencies
+# ============================================
+
+# --- Core Framework ---
+streamlit>=1.30.0
+
+# --- LLM Integration (LangChain + OpenAI-compatible) ---
+langchain>=0.1.0
+langchain-core>=0.1.0
+langchain-community>=0.0.10
+langchain-openai>=0.0.5
+langchain-text-splitters>=0.0.1
+openai>=1.10.0
+
+# --- Vector Database ---
+chromadb>=0.4.22
+
+# --- Embeddings ---
+sentence-transformers>=2.3.0
+
+# --- Dataset ---
+datasets>=2.16.0
+
+# --- Utilities ---
+python-dotenv>=1.0.0
+tiktoken>=0.5.0
