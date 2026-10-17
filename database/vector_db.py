@@ -91,9 +91,6 @@ class VectorDatabase:
             page_content_column="prompt",
             name="openai_humaneval"
         )
-        # Note: By default, HuggingFaceDatasetLoader loads the 'train' split unless configured, 
-        # which can throw an error on HumanEval since it only has a 'test' split. 
-        # Iterating directly over `load_dataset(..., split="test")` as shown above is safer.
         raw_documents = loader.load()
 
         for idx, doc in enumerate(raw_documents):
@@ -127,7 +124,6 @@ class VectorDatabase:
         if top_k is None:
             top_k = TOP_K_RESULTS
 
-        # Use LangChain's similarity_search_with_score
         results = self.vector_store.similarity_search_with_score(query, k=top_k)
 
         formatted = []
