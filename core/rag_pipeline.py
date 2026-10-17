@@ -1,18 +1,3 @@
-# ============================================
-# RAG Pipeline Module
-# ============================================
-# Implements the Retrieval-Augmented Generation
-# pipeline for code generation requests.
-#
-# Pipeline steps:
-#   1. Receive the user's query
-#   2. Search ChromaDB for relevant documents
-#   3. Pass retrieved context to a Relevance
-#      Evaluator (another LLM call via LangChain)
-#   4. If relevant → generate code with context
-#      If not relevant → ask user for help
-# ============================================
-
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser

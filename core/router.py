@@ -1,18 +1,3 @@
-# ============================================
-# Intelligent Router Module
-# ============================================
-# The central orchestrator that receives a
-# classified intent and dispatches the request
-# to the correct processing pipeline:
-#
-#   EXPLAIN  →  Direct LLM analysis (no RAG)
-#   GENERATE →  RAG retrieval → Relevance check
-#               → LLM generation
-#   FEEDBACK →  Learn from user → Store in VDB
-#
-# All LLM calls use LangChain + OpenRouter.
-# ============================================
-
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
