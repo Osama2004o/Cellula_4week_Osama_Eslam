@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice to SQL Studio — Speech-to-Text & SQLite Execution</title>
+  <meta name="description" content="End-to-end voice and text to SQLite pipeline: Record audio, transcribe with faster-whisper, generate SQLite queries with LangChain, and execute queries in real-time." />
+
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <style>
+    /* ==========================================================================
+       CSS Variables & Global Reset
+       ========================================================================== */
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-secondary: #111827;
+      --bg-card: rgba(17, 24, 39, 0.75);
+      --bg-card-hover: rgba(24, 34, 53, 0.85);
+      --bg-glass: rgba(255, 255, 255, 0.03);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-highlight: rgba(99, 102, 241, 0.3);
+      
+      --accent-primary: #6366f1;
+      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+      --accent-cyan: #06b6d4;
+      --accent-emerald: #10b981;
+      --accent-rose: #f43f5e;
+      --accent-amber: #f59e0b;
+      
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --shadow-glow: 0 0 25px rgba(99, 102, 241, 0.25);
+      --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+      
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-display: 'Outfit', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-arabic: 'Cairo', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      background-image: 
+        radial-gradient(at 15% 15%, rgba(99, 102, 241, 0.12) 0px, transparent 45%),
+        radial-gradient(at 85% 10%, rgba(236, 72, 153, 0.08) 0px, transparent 40%),
+        radial-gradient(at 50% 90%, rgba(6, 182, 212, 0.08) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    /* ==========================================================================
+       Top Navigation & Server Status Bar
+       ========================================================================== */
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.25rem 2rem;
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow-card);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .brand-logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      color: #fff;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+    }
+
+    .brand-title h1 {
+      font-family: var(--font-display);
+      font-size: 1.45rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #ffffff 30%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-title p {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      padding: 0.4rem 0.9rem;
+      border-radius: 30px;
+      font-size: 0.78rem;
+      font-weight: 500;
+    }
+
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent-amber);
+      transition: all 0.3s ease;
+    }
+
+    .status-dot.online {
+      background: var(--accent-emerald);
+      box-shadow: 0 0 10px var(--accent-emerald);
+    }
+
+    .status-dot.offline {
+      background: var(--accent-rose);
+      box-shadow: 0 0 10px var(--accent-rose);
+    }
+
+    .btn-secondary-sm {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      padding: 0.45rem 0.9rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s ease;
+    }
+
+    .btn-secondary-sm:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
+    }
+
+    /* ==========================================================================
+       Sample Prompt Chips
+       ========================================================================== */
+    .quick-samples {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+      padding: 0.8rem 1.25rem;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px dashed var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+
+    .quick-samples-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .sample-chip {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      padding: 0.3rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .sample-chip:hover {
+      background: rgba(99, 102, 241, 0.15);
+      border-color: var(--accent-primary);
+      color: var(--text-primary);
+      transform: translateY(-1px);
+    }
+
+    .sample-chip.arabic {
+      font-family: var(--font-arabic);
+      direction: rtl;
+    }
+
+    /* ==========================================================================
+       3-Step Grid Layout
+       ========================================================================== */
+    .pipeline-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.75rem;
+      margin-bottom: 2rem;
+    }
+
+    @media (max-width: 1024px) {
+      .pipeline-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Card Component */
+    .card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 1.6rem;
+      box-shadow: var(--shadow-card);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+      transition: border-color 0.3s ease;
+    }
+
+    .card:hover {
+      border-color: var(--border-highlight);
+    }
+
+    .card.full-width {
+      grid-column: 1 / -1;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 0.9rem;
+    }
+
+    .card-badge-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .step-number {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--accent-gradient);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.85rem;
+      font-family: var(--font-display);
+    }
+
+    .card-title {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .card-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* ==========================================================================
+       Step 1: Audio Recording & Transcription
+       ========================================================================== */
+    .audio-studio {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .mic-recording-zone {
+      background: rgba(0, 0, 0, 0.3);
+      border: 2px dashed rgba(255, 255, 255, 0.1);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .mic-recording-zone.is-recording {
+      border-color: var(--accent-rose);
+      background: rgba(244, 63, 94, 0.05);
+    }
+
+    /* Pulsing Mic Button */
+    .btn-record {
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      background: var(--accent-gradient);
+      border: none;
+      color: #fff;
+      font-size: 1.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .btn-record:hover {
+      transform: scale(1.06);
+      box-shadow: 0 0 30px rgba(99, 102, 241, 0.6);
+    }
+
+    .btn-record.recording {
+      background: var(--accent-rose);
+      box-shadow: 0 0 25px rgba(244, 63, 94, 0.7);
+      animation: pulse-ring 1.5s infinite;
+    }
+
+    @keyframes pulse-ring {
+      0% {
+        box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.7);
+      }
+      70% {
+        box-shadow: 0 0 0 20px rgba(244, 63, 94, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(244, 63, 94, 0);
+      }
+    }
+
+    /* Waveform Canvas */
+    .waveform-canvas {
+      width: 100%;
+      height: 50px;
+      border-radius: var(--radius-sm);
+    }
+
+    .recording-timer {
+      font-family: var(--font-mono);
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: 0.1em;
+    }
+
+    .recording-status-text {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    /* Audio preview playback */
+    .audio-player-wrapper {
+      width: 100%;
+      display: none;
+    }
+
+    .audio-player-wrapper.active {
+      display: block;
+    }
+
+    audio {
+      width: 100%;
+      height: 38px;
+      border-radius: 20px;
+      filter: invert(0.9) hue-rotate(180deg);
+    }
+
+    /* Controls Row */
+    .controls-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .select-input, .text-input {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      padding: 0.55rem 0.9rem;
+      font-size: 0.85rem;
+      font-family: var(--font-sans);
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .select-input:focus, .text-input:focus {
+      border-color: var(--accent-primary);
+    }
+
+    .file-upload-label {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 0.55rem 0.9rem;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s ease;
+    }
+
+    .file-upload-label:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-primary);
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    /* Primary Action Button */
+    .btn-primary {
+      background: var(--accent-gradient);
+      border: none;
+      color: #fff;
+      padding: 0.65rem 1.25rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-success:hover:not(:disabled) {
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+    }
+
+    /* Textarea for Transcription */
+    .transcript-box {
+      width: 100%;
+      min-height: 110px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      padding: 0.9rem;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      font-family: var(--font-sans);
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .transcript-box:focus {
+      border-color: var(--accent-primary);
+    }
+
+    .transcript-box.rtl {
+      font-family: var(--font-arabic);
+      direction: rtl;
+      text-align: right;
+    }
+
+    /* ==========================================================================
+       Step 2: Text-to-SQLite Generator
+       ========================================================================== */
+    .sql-editor-container {
+      position: relative;
+    }
+
+    .sql-code-editor {
+      width: 100%;
+      min-height: 140px;
+      background: #0d1117;
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      border-radius: var(--radius-sm);
+      color: #7ee787;
+      padding: 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.6;
+      resize: vertical;
+      outline: none;
+      box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5);
+      transition: border-color 0.2s ease;
+    }
+
+    .sql-code-editor:focus {
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.3), inset 0 2px 10px rgba(0, 0, 0, 0.5);
+    }
+
+    .sql-meta-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 0.4rem;
+    }
+
+    .copy-toast {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 0.3rem 0.6rem;
+      font-size: 0.75rem;
+      color: var(--accent-emerald);
+      display: none;
+    }
+
+    /* ==========================================================================
+       Step 3: Database Execution & Interactive Table
+       ========================================================================== */
+    .execution-stats-bar {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      padding: 0.75rem 1.25rem;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .stat-item strong {
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+    }
+
+    .table-container {
+      width: 100%;
+      max-height: 440px;
+      overflow: auto;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: rgba(0, 0, 0, 0.25);
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      text-align: left;
+    }
+
+    .data-table th {
+      background: #161f30;
+      color: #cbd5e1;
+      font-weight: 600;
+      padding: 0.85rem 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      border-bottom: 2px solid var(--accent-primary);
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .data-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--text-primary);
+      white-space: nowrap;
+      font-family: var(--font-sans);
+    }
+
+    .data-table tbody tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    .data-table tbody tr:hover {
+      background: rgba(99, 102, 241, 0.08);
+    }
+
+    .empty-state {
+      padding: 3rem 1rem;
+      text-align: center;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .empty-state i {
+      font-size: 2.2rem;
+      color: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Error Banner */
+    .error-banner {
+      background: rgba(244, 63, 94, 0.1);
+      border-left: 4px solid var(--accent-rose);
+      padding: 0.9rem 1.25rem;
+      border-radius: var(--radius-sm);
+      color: #fecdd3;
+      font-size: 0.88rem;
+      display: none;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    .error-banner.active {
+      display: flex;
+    }
+
+    /* ==========================================================================
+       Schema Modal / Drawer
+       ========================================================================== */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      z-index: 999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .modal-backdrop.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      max-width: 900px;
+      width: 100%;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      overflow: hidden;
+    }
+
+    .modal-header {
+      padding: 1.25rem 1.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-body {
+      padding: 1.5rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .schema-table-card {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+    }
+
+    .schema-table-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.6rem;
+    }
+
+    .schema-table-name {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--accent-cyan);
+    }
+
+    .schema-columns-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .schema-col-pill {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+    }
+
+    .schema-col-pill.pk {
+      border-color: var(--accent-amber);
+      color: var(--accent-amber);
+    }
+
+    /* ==========================================================================
+       Spinner & Animations
+       ========================================================================== */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Top Bar -->
+    <header class="header-bar">
+      <div class="brand">
+        <div class="brand-logo">
+          <i class="fa-solid fa-microphone-lines"></i>
+        </div>
+        <div class="brand-title">
+          <h1>Voice to SQLite Studio</h1>
+          <p>
+            <span>Whisper Transcription</span> • 
+            <span>LangChain Text-to-SQL</span> • 
+            <span>Live SQLite Execution</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div class="status-pill" id="serverStatusPill">
+          <div class="status-dot" id="serverStatusDot"></div>
+          <span id="serverStatusText">Connecting...</span>
+        </div>
+
+        <button class="btn-secondary-sm" id="btnViewSchema">
+          <i class="fa-solid fa-database"></i> View Schema
+        </button>
+
+        <button class="btn-secondary-sm" id="btnResetDb" title="Reset sample SQLite database">
+          <i class="fa-solid fa-rotate-left"></i> Reset DB
+        </button>
+      </div>
+    </header>
+
+    <!-- Quick Sample Prompts -->
+    <div class="quick-samples">
+      <span class="quick-samples-label"><i class="fa-solid fa-bolt"></i> Quick Queries:</span>
+      <button class="sample-chip" data-query="Show the top 5 most expensive products and their stock" data-lang="en">
+        Top 5 Expensive Products
+      </button>
+      <button class="sample-chip" data-query="Calculate total sales amount by region from the sales table" data-lang="en">
+        Total Sales by Region
+      </button>
+      <button class="sample-chip" data-query="List all employees in the Engineering department with their salary" data-lang="en">
+        Engineering Employees & Salaries
+      </button>
+      <button class="sample-chip" data-query="Find customers from Cairo or Alexandria with balance over 400" data-lang="en">
+        Customers in Egypt
+      </button>
+      <button class="sample-chip arabic" data-query="اعرض أعلى 5 منتجات سعرا مع الكمية المتوفرة" data-lang="ar">
+        أعلى 5 منتجات سعراً
+      </button>
+      <button class="sample-chip arabic" data-query="ما هو إجمالي المبيعات لكل قسم من أقسام المنتجات؟" data-lang="ar">
+        إجمالي المبيعات حسب القسم
+      </button>
+    </div>
+
+    <!-- Main Pipeline Grid -->
+    <main class="pipeline-grid">
+
+      <!-- Step 1 Card: Audio Recording & Transcription -->
+      <section class="card" id="cardStep1">
+        <div class="card-header">
+          <div class="card-badge-title">
+            <span class="step-number">1</span>
+            <h2 class="card-title">Speech-to-Text Transcription</h2>
+          </div>
+          <div class="card-header-actions">
+            <select id="selectLanguage" class="select-input" title="Speech Language">
+              <option value="english">English (en)</option>
+              <option value="arabic">Arabic (ar)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="audio-studio">
+          <!-- Live Mic Zone -->
+          <div class="mic-recording-zone" id="micZone">
+            <button class="btn-record" id="btnRecordMic" title="Click to Record Audio">
+              <i class="fa-solid fa-microphone" id="micIcon"></i>
+            </button>
+            <div class="recording-timer" id="recordingTimer">00:00</div>
+            <div class="recording-status-text" id="recordingStatusText">Click microphone to start recording</div>
+            <canvas id="waveformCanvas" class="waveform-canvas"></canvas>
+          </div>
+
+          <!-- Audio playback preview -->
+          <div class="audio-player-wrapper" id="audioPlayerWrapper">
+            <audio id="audioPreview" controls></audio>
+          </div>
+
+          <!-- Secondary Audio Options -->
+          <div class="controls-row">
+            <label class="file-upload-label" for="fileAudioUpload">
+              <i class="fa-solid fa-upload"></i> Upload Audio (.wav, .mp3, .m4a)
+            </label>
+            <input type="file" id="fileAudioUpload" accept="audio/*" />
+            <span id="fileNameDisplay" style="font-size: 0.78rem; color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+
+            <button class="btn-primary" id="btnTranscribe">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Transcribe
+            </button>
+          </div>
+
+          <!-- Transcribed Text Box -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+              <label for="transcriptText" style="font-size: 0.82rem; font-weight: 600; color: var(--text-secondary);">
+                Transcribed Request (Editable):
+              </label>
+              <span id="transcriptMeta" style="font-size: 0.75rem; color: var(--accent-cyan);"></span>
+            </div>
+            <textarea id="transcriptText" class="transcript-box" placeholder="Your spoken or typed query will appear here..."></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 2 Card: Text-to-SQLite Generator -->
+      <section class="card" id="cardStep2">
+        <div class="card-header">
+          <div class="card-badge-title">
+            <span class="step-number">2</span>
+            <h2 class="card-title">Text-to-SQLite Generator</h2>
+          </div>
+          <div class="card-header-actions">
+            <button class="btn-primary" id="btnGenerateSql">
+              <i class="fa-solid fa-code"></i> Generate SQL
+            </button>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.8rem; height: 100%;">
+          <div class="sql-editor-container">
+            <textarea id="sqlQueryText" class="sql-code-editor" spellcheck="false" placeholder="-- Generated SQLite query will appear here.&#10;-- You can edit or write custom SQL anytime!&#10;SELECT name, price, stock_quantity FROM products ORDER BY price DESC LIMIT 5;"></textarea>
+            <div class="copy-toast" id="copyToast"><i class="fa-solid fa-check"></i> Copied!</div>
+          </div>
+
+          <div class="sql-meta-bar">
+            <span>Target Engine: <strong>SQLite 3</strong></span>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn-secondary-sm" id="btnCopySql">
+                <i class="fa-regular fa-copy"></i> Copy SQL
+              </button>
+              <button class="btn-primary btn-success" id="btnExecuteSql">
+                <i class="fa-solid fa-play"></i> Execute Query
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 3 Card: Interactive Database Execution Results -->
+      <section class="card full-width" id="cardStep3">
+        <div class="card-header">
+          <div class="card-badge-title">
+            <span class="step-number">3</span>
+            <h2 class="card-title">Database Query Results Table</h2>
+          </div>
+          <div class="card-header-actions">
+            <input type="text" id="tableFilterInput" class="text-input" placeholder="Search / filter rows..." style="width: 220px;" />
+            <button class="btn-secondary-sm" id="btnExportCsv">
+              <i class="fa-solid fa-file-csv"></i> Export CSV
+            </button>
+          </div>
+        </div>
+
+        <!-- Query Execution Stats -->
+        <div class="execution-stats-bar">
+          <div class="stat-item">
+            <i class="fa-regular fa-clock" style="color: var(--accent-cyan);"></i>
+            <span>Latency: <strong id="statLatency">0.0 ms</strong></span>
+          </div>
+          <div class="stat-item">
+            <i class="fa-solid fa-table-cells" style="color: var(--accent-emerald);"></i>
+            <span>Rows: <strong id="statRowCount">0</strong></span>
+          </div>
+          <div class="stat-item">
+            <i class="fa-solid fa-columns" style="color: var(--accent-primary);"></i>
+            <span>Columns: <strong id="statColCount">0</strong></span>
+          </div>
+        </div>
+
+        <!-- Error Notification Banner -->
+        <div class="error-banner" id="errorBanner">
+          <i class="fa-solid fa-triangle-exclamation" style="margin-top: 2px;"></i>
+          <div id="errorMessage">Error executing SQLite query.</div>
+        </div>
+
+        <!-- Table Container -->
+        <div class="table-container" id="tableContainer">
+          <div class="empty-state" id="tableEmptyState">
+            <i class="fa-solid fa-table-list"></i>
+            <p>No query executed yet. Record voice, generate SQL, and click <strong>Execute Query</strong> to view the results table.</p>
+          </div>
+          <table class="data-table" id="resultsTable" style="display: none;">
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Schema Inspector Modal -->
+  <div class="modal-backdrop" id="schemaModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 style="font-family: var(--font-display);"><i class="fa-solid fa-database" style="color: var(--accent-primary); margin-right: 0.5rem;"></i> Active SQLite Database Schema</h3>
+        <button class="btn-secondary-sm" id="btnCloseModal"><i class="fa-solid fa-xmark"></i> Close</button>
+      </div>
+      <div class="modal-body" id="schemaModalBody">
+        <div class="spinner"></div> Loading schema...
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Logic -->
+  <script>
+    // Configuration
+    const API_BASE_URL = window.location.origin.startsWith('http') 
+      ? window.location.origin 
+      : 'http://127.0.0.1:8000';
+
+    // State Variables
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let audioBlob = null;
+    let recordingInterval = null;
+    let recordingSeconds = 0;
+    let audioContext = null;
+    let analyserNode = null;
+    let animationFrameId = null;
+    let currentTableData = { columns: [], rows: [] };
+
+    // DOM Elements
+    const serverStatusDot = document.getElementById('serverStatusDot');
+    const serverStatusText = document.getElementById('serverStatusText');
+    const btnRecordMic = document.getElementById('btnRecordMic');
+    const micIcon = document.getElementById('micIcon');
+    const micZone = document.getElementById('micZone');
+    const recordingTimer = document.getElementById('recordingTimer');
+    const recordingStatusText = document.getElementById('recordingStatusText');
+    const waveformCanvas = document.getElementById('waveformCanvas');
+    const audioPreview = document.getElementById('audioPreview');
+    const audioPlayerWrapper = document.getElementById('audioPlayerWrapper');
+    const fileAudioUpload = document.getElementById('fileAudioUpload');
+    const fileNameDisplay = document.getElementById('fileNameDisplay');
+    const selectLanguage = document.getElementById('selectLanguage');
+    const btnTranscribe = document.getElementById('btnTranscribe');
+    const transcriptText = document.getElementById('transcriptText');
+    const transcriptMeta = document.getElementById('transcriptMeta');
+    const btnGenerateSql = document.getElementById('btnGenerateSql');
+    const sqlQueryText = document.getElementById('sqlQueryText');
+    const btnExecuteSql = document.getElementById('btnExecuteSql');
+    const btnCopySql = document.getElementById('btnCopySql');
+    const copyToast = document.getElementById('copyToast');
+    const tableContainer = document.getElementById('tableContainer');
+    const resultsTable = document.getElementById('resultsTable');
+    const tableHead = document.getElementById('tableHead');
+    const tableBody = document.getElementById('tableBody');
+    const tableEmptyState = document.getElementById('tableEmptyState');
+    const statLatency = document.getElementById('statLatency');
+    const statRowCount = document.getElementById('statRowCount');
+    const statColCount = document.getElementById('statColCount');
+    const errorBanner = document.getElementById('errorBanner');
+    const errorMessage = document.getElementById('errorMessage');
+    const tableFilterInput = document.getElementById('tableFilterInput');
+    const btnExportCsv = document.getElementById('btnExportCsv');
+    const btnViewSchema = document.getElementById('btnViewSchema');
+    const btnResetDb = document.getElementById('btnResetDb');
+    const schemaModal = document.getElementById('schemaModal');
+    const btnCloseModal = document.getElementById('btnCloseModal');
+    const schemaModalBody = document.getElementById('schemaModalBody');
+
+    // =========================================================================
+    // 1. Backend Connectivity Health Check
+    // =========================================================================
+    async function checkServerHealth() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/info`);
+        if (res.ok) {
+          serverStatusDot.className = 'status-dot online';
+          serverStatusText.textContent = 'API Connected (8000)';
+        } else {
+          throw new Error('Non-200 status');
+        }
+      } catch (err) {
+        serverStatusDot.className = 'status-dot offline';
+        serverStatusText.textContent = 'API Offline';
+      }
+    }
+    checkServerHealth();
+    setInterval(checkServerHealth, 10000);
+
+    // =========================================================================
+    // 2. Microphone Recording & Waveform Equalizer
+    // =========================================================================
+    btnRecordMic.addEventListener('click', async () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        stopRecording();
+      } else {
+        await startRecording();
+      }
+    });
+
+    async function startRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // Supported mime types
+        let mimeType = 'audio/webm';
+        if (!MediaRecorder.isTypeSupported('audio/webm')) {
+          if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+          else if (MediaRecorder.isTypeSupported('audio/ogg')) mimeType = 'audio/ogg';
+          else mimeType = '';
+        }
+
+        mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const finalType = mediaRecorder.mimeType || 'audio/webm';
+          audioBlob = new Blob(audioChunks, { type: finalType });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          audioPreview.src = audioUrl;
+          audioPlayerWrapper.classList.add('active');
+          fileNameDisplay.textContent = `Recorded voice (${(audioBlob.size / 1024).toFixed(1)} KB)`;
+          
+          // Stop stream tracks
+          stream.getTracks().forEach(track => track.stop());
+          cancelAnimationFrame(animationFrameId);
+        };
+
+        mediaRecorder.start(100);
+
+        // UI state update
+        btnRecordMic.classList.add('recording');
+        micIcon.className = 'fa-solid fa-stop';
+        micZone.classList.add('is-recording');
+        recordingStatusText.textContent = 'Recording live audio... Click to stop';
+        
+        // Timer
+        recordingSeconds = 0;
+        recordingTimer.textContent = '00:00';
+        recordingInterval = setInterval(() => {
+          recordingSeconds++;
+          const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
+          const secs = String(recordingSeconds % 60).padStart(2, '0');
+          recordingTimer.textContent = `${mins}:${secs}`;
+        }, 1000);
+
+        // Visualizer
+        startVisualizer(stream);
+
+      } catch (err) {
+        alert('Microphone access denied or not available. You can also upload an audio file directly.');
+        console.error('Mic error:', err);
+      }
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+      }
+      clearInterval(recordingInterval);
+      btnRecordMic.classList.remove('recording');
+      micIcon.className = 'fa-solid fa-microphone';
+      micZone.classList.remove('is-recording');
+      recordingStatusText.textContent = 'Audio recorded successfully! Ready to transcribe.';
+    }
+
+    function startVisualizer(stream) {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const source = audioContext.createMediaStreamSource(stream);
+      analyserNode = audioContext.createAnalyser();
+      analyserNode.fftSize = 64;
+      source.connect(analyserNode);
+
+      const canvasCtx = waveformCanvas.getContext('2d');
+      const bufferLength = analyserNode.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      function draw() {
+        animationFrameId = requestAnimationFrame(draw);
+        analyserNode.getByteFrequencyData(dataArray);
+
+        canvasCtx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+        const barWidth = (waveformCanvas.width / bufferLength) * 1.5;
+        let x = 0;
+
+        for (let i = 0; i < bufferLength; i++) {
+          const barHeight = (dataArray[i] / 255) * waveformCanvas.height;
+          canvasCtx.fillStyle = '#6366f1';
+          canvasCtx.fillRect(x, waveformCanvas.height - barHeight, barWidth - 2, barHeight);
+          x += barWidth;
+        }
+      }
+      draw();
+    }
+
+    // Audio file upload handler
+    fileAudioUpload.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        audioBlob = file;
+        fileNameDisplay.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+        audioPreview.src = URL.createObjectURL(file);
+        audioPlayerWrapper.classList.add('active');
+        recordingStatusText.textContent = 'Custom audio file selected. Ready to transcribe.';
+      }
+    });
+
+    // =========================================================================
+    // 3. Step 1 Action: Transcribe Audio
+    // =========================================================================
+    btnTranscribe.addEventListener('click', async () => {
+      const lang = selectLanguage.value;
+      const formData = new FormData();
+      
+      if (audioBlob) {
+        const ext = audioBlob.name ? audioBlob.name.split('.').pop() : 'webm';
+        formData.append('file', audioBlob, `recording.${ext}`);
+      }
+
+      setLoading(btnTranscribe, true, 'Transcribing...');
+      hideError();
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/transcribe?language=${lang}&beam_size=5`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.detail || 'Transcription failed');
+        }
+
+        const data = await response.json();
+        transcriptText.value = data.transcript;
+        transcriptMeta.textContent = `Detected: ${data.language.toUpperCase()} • ${data.segments.length} segment(s)`;
+
+        // RTL adjustment if Arabic
+        if (data.language === 'ar' || lang === 'arabic') {
+          transcriptText.classList.add('rtl');
+        } else {
+          transcriptText.classList.remove('rtl');
+        }
+
+      } catch (err) {
+        showError(`Transcription Error: ${err.message}`);
+      } finally {
+        setLoading(btnTranscribe, false, '<i class="fa-solid fa-wand-magic-sparkles"></i> Transcribe');
+      }
+    });
+
+    // =========================================================================
+    // 4. Step 2 Action: Generate SQLite Query (Text-to-SQL)
+    // =========================================================================
+    btnGenerateSql.addEventListener('click', async () => {
+      const query = transcriptText.value.trim();
+      if (!query) {
+        showError('Please provide spoken or typed text in Step 1 before generating SQL.');
+        transcriptText.focus();
+        return;
+      }
+
+      setLoading(btnGenerateSql, true, 'Generating SQL...');
+      hideError();
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/text-to-sql`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: query,
+            schema_context: null // Automatically injects active SQLite schema from backend
+          })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.detail || 'SQL generation failed');
+        }
+
+        const data = await response.json();
+        sqlQueryText.value = data.sql;
+
+      } catch (err) {
+        showError(`SQL Generation Error: ${err.message}`);
+      } finally {
+        setLoading(btnGenerateSql, false, '<i class="fa-solid fa-code"></i> Generate SQL');
+      }
+    });
+
+    // Copy SQL Button
+    btnCopySql.addEventListener('click', () => {
+      const sql = sqlQueryText.value.trim();
+      if (!sql) return;
+      navigator.clipboard.writeText(sql);
+      copyToast.style.display = 'block';
+      setTimeout(() => { copyToast.style.display = 'none'; }, 2000);
+    });
+
+    // =========================================================================
+    // 5. Step 3 Action: Execute SQLite Query & Render Results Table
+    // =========================================================================
+    btnExecuteSql.addEventListener('click', async () => {
+      const sql = sqlQueryText.value.trim();
+      if (!sql) {
+        showError('Please provide or generate a SQL query to execute.');
+        sqlQueryText.focus();
+        return;
+      }
+
+      setLoading(btnExecuteSql, true, 'Executing...');
+      hideError();
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/execute-sql`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sql })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.detail || 'Execution failed');
+        }
+
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to execute query');
+        }
+
+        // Update stats
+        statLatency.textContent = `${data.execution_time_ms} ms`;
+        statRowCount.textContent = data.row_count;
+        statColCount.textContent = data.columns.length;
+
+        // Render table
+        currentTableData = { columns: data.columns, rows: data.rows };
+        renderTable(data.columns, data.rows);
+
+      } catch (err) {
+        showError(`Execution Error: ${err.message}`);
+        statLatency.textContent = '0.0 ms';
+        statRowCount.textContent = '0';
+        statColCount.textContent = '0';
+      } finally {
+        setLoading(btnExecuteSql, false, '<i class="fa-solid fa-play"></i> Execute Query');
+      }
+    });
+
+    function renderTable(columns, rows) {
+      if (!columns || columns.length === 0) {
+        tableEmptyState.style.display = 'flex';
+        resultsTable.style.display = 'none';
+        return;
+      }
+
+      tableEmptyState.style.display = 'none';
+      resultsTable.style.display = 'table';
+
+      // Table Header
+      tableHead.innerHTML = `<tr>${columns.map(col => `<th>${escapeHtml(col)}</th>`).join('')}</tr>`;
+
+      // Table Body
+      if (rows.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="${columns.length}" style="text-align: center; color: var(--text-muted); padding: 2rem;">Query returned 0 rows.</td></tr>`;
+      } else {
+        tableBody.innerHTML = rows.map(row => `
+          <tr>
+            ${row.map(cell => `<td>${formatCellValue(cell)}</td>`).join('')}
+          </tr>
+        `).join('');
+      }
+    }
+
+    function formatCellValue(val) {
+      if (val === null || val === undefined) {
+        return '<span style="color: var(--text-muted); font-style: italic;">NULL</span>';
+      }
+      if (typeof val === 'number') {
+        return escapeHtml(String(val));
+      }
+      return escapeHtml(String(val));
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+      );
+    }
+
+    // Filter rows in real-time
+    tableFilterInput.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      if (!currentTableData.rows || currentTableData.rows.length === 0) return;
+
+      if (!query) {
+        renderTable(currentTableData.columns, currentTableData.rows);
+        statRowCount.textContent = currentTableData.rows.length;
+        return;
+      }
+
+      const filteredRows = currentTableData.rows.filter(row => 
+        row.some(cell => String(cell).toLowerCase().includes(query))
+      );
+
+      renderTable(currentTableData.columns, filteredRows);
+      statRowCount.textContent = `${filteredRows.length} (filtered of ${currentTableData.rows.length})`;
+    });
+
+    // Export CSV
+    btnExportCsv.addEventListener('click', () => {
+      if (!currentTableData.columns.length || !currentTableData.rows.length) {
+        alert('No query results available to export.');
+        return;
+      }
+
+      const csvRows = [];
+      csvRows.push(currentTableData.columns.join(','));
+
+      currentTableData.rows.forEach(row => {
+        const escaped = row.map(cell => {
+          const str = String(cell ?? '');
+          return `"${str.replace(/"/g, '""')}"`;
+        });
+        csvRows.push(escaped.join(','));
+      });
+
+      const csvBlob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+      const url = URL.createObjectURL(csvBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `query_result_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
+      a.click();
+    });
+
+    // =========================================================================
+    // 6. Quick Sample Chips Handler
+    // =========================================================================
+    document.querySelectorAll('.sample-chip').forEach(chip => {
+      chip.addEventListener('click', async () => {
+        const query = chip.getAttribute('data-query');
+        const lang = chip.getAttribute('data-lang');
+        
+        transcriptText.value = query;
+        selectLanguage.value = lang === 'ar' ? 'arabic' : 'english';
+        
+        if (lang === 'ar') {
+          transcriptText.classList.add('rtl');
+        } else {
+          transcriptText.classList.remove('rtl');
+        }
+
+        // Auto trigger SQL Generation & Execution
+        btnGenerateSql.click();
+      });
+    });
+
+    // =========================================================================
+    // 7. Schema Viewer Modal & DB Reset
+    // =========================================================================
+    btnViewSchema.addEventListener('click', async () => {
+      schemaModal.classList.add('active');
+      schemaModalBody.innerHTML = '<div class="spinner"></div> Fetching SQLite tables...';
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/database/schema`);
+        const data = await res.json();
+
+        schemaModalBody.innerHTML = data.tables.map(table => `
+          <div class="schema-table-card">
+            <div class="schema-table-header">
+              <span class="schema-table-name"><i class="fa-solid fa-table"></i> ${table.table_name}</span>
+              <span style="font-size: 0.78rem; color: var(--text-muted);">${table.row_count} rows</span>
+            </div>
+            <div class="schema-columns-list">
+              ${table.columns.map(col => `
+                <span class="schema-col-pill ${col.pk ? 'pk' : ''}">
+                  ${col.pk ? '<i class="fa-solid fa-key" style="font-size: 0.65rem;"></i> ' : ''}${col.name} <small style="opacity: 0.7;">(${col.type})</small>
+                </span>
+              `).join('')}
+            </div>
+          </div>
+        `).join('');
+
+      } catch (err) {
+        schemaModalBody.innerHTML = `<div style="color: var(--accent-rose);">Failed to load schema: ${err.message}</div>`;
+      }
+    });
+
+    btnCloseModal.addEventListener('click', () => {
+      schemaModal.classList.remove('active');
+    });
+
+    schemaModal.addEventListener('click', (e) => {
+      if (e.target === schemaModal) schemaModal.classList.remove('active');
+    });
+
+    btnResetDb.addEventListener('click', async () => {
+      if (!confirm('Are you sure you want to reset the SQLite database to initial seed data?')) return;
+      try {
+        const res = await fetch(`${API_BASE_URL}/database/reset`, { method: 'POST' });
+        const data = await res.json();
+        alert(data.message || 'Database reset successfully.');
+      } catch (err) {
+        alert(`Reset failed: ${err.message}`);
+      }
+    });
+
+    // =========================================================================
+    // Helper Functions
+    // =========================================================================
+    function showError(msg) {
+      errorMessage.textContent = msg;
+      errorBanner.classList.add('active');
+    }
+
+    function hideError() {
+      errorBanner.classList.remove('active');
+    }
+
+    function setLoading(button, isLoading, text) {
+      if (isLoading) {
+        button.disabled = true;
+        button.innerHTML = `<div class="spinner"></div> ${text}`;
+      } else {
+        button.disabled = false;
+        button.innerHTML = text;
+      }
+    }
+  </script>
+</body>
+</html>

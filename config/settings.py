@@ -5,7 +5,7 @@ load_dotenv()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-LLM_MODEL = "openrouter/free"
+LLM_MODEL = os.getenv("LLM_MODEL", "openrouter/free")
 GENERATION_TEMPERATURE = 0.5
 MAX_OUTPUT_TOKENS = 8192
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
