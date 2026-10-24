@@ -141,9 +141,7 @@ def api_info():
     }
 
 
-# ==============================================================================
 # Step 1: Speech-to-Text Transcription
-# ==============================================================================
 @app.post("/transcribe", response_model=TranscriptionResponse)
 async def transcribe_audio(
     file: Optional[UploadFile] = File(
@@ -182,9 +180,7 @@ async def transcribe_audio(
                 pass
 
 
-# ==============================================================================
 # Step 2: Text-to-SQLite Query Generation (LangChain + OpenRouter)
-# ==============================================================================
 @app.post("/text-to-sql", response_model=TextToSQLResponse)
 async def text_to_sql(payload: TextToSQLRequest):
     """
@@ -208,9 +204,7 @@ async def text_to_sql(payload: TextToSQLRequest):
         raise HTTPException(status_code=500, detail=f"SQLite generation error: {str(e)}")
 
 
-# ==============================================================================
 # Step 3: SQLite Query Execution & Table Results
-# ==============================================================================
 @app.post("/execute-sql", response_model=ExecuteSQLResponse)
 async def execute_sql(payload: ExecuteSQLRequest):
     """
@@ -227,9 +221,7 @@ async def execute_sql(payload: ExecuteSQLRequest):
         raise HTTPException(status_code=500, detail=f"Database execution error: {str(e)}")
 
 
-# ==============================================================================
 # Database Schema & Management Endpoints
-# ==============================================================================
 @app.get("/database/schema")
 def get_db_schema():
     """Returns the SQLite schema DDL and table details for UI inspection."""
